@@ -7,7 +7,6 @@ import {
 	DepthTexture,
 	LessCompare,
 	Vector2,
-	RedFormat,
 	ArrayCamera,
 	VSMShadowMap,
 	RendererUtils,
@@ -162,9 +161,9 @@ class TileShadowNode extends ShadowBaseNode {
 		const depthTexture = new DepthTexture( shadowWidth, shadowHeight, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, tileCount );
 		depthTexture.compareFunction = LessCompare;
 		depthTexture.name = 'ShadowDepthArrayTexture';
-		const shadowMap = builder.createRenderTarget( shadowWidth, shadowHeight, { format: RedFormat, depth: tileCount, useArrayDepthTexture: true } );
+		// Depth-only: the tiles are sampled through their depth texture alone.
+		const shadowMap = builder.createRenderTarget( shadowWidth, shadowHeight, { count: 0, depth: tileCount, useArrayDepthTexture: true } );
 		shadowMap.depthTexture = depthTexture;
-		shadowMap.texture.name = 'ShadowTexture';
 		this.shadowMap = shadowMap;
 		const cameras = [];
 
