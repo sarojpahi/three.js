@@ -14,7 +14,7 @@ import {
 	Quaternion
 } from 'three/webgpu';
 
-import { min, Fn, shadow, NodeUpdateType } from 'three/tsl';
+import { Fn, If, float, int, lightShadowMatrix, normalWorld, reference, renderGroup, shadow, shadowPositionWorld, vec4, NodeUpdateType } from 'three/tsl';
 
 const { resetRendererAndSceneState, restoreRendererAndSceneState } = RendererUtils;
 let _rendererState;
@@ -259,6 +259,11 @@ class TileShadowNode extends ShadowBaseNode {
 
 		}
 
+		// The original light does not render a shadow map, but its shadow matrix selects the tile in setup().
+
+		shadowCam.updateProjectionMatrix();
+		light.shadow.updateMatrices( light );
+
 	}
 
 	/**
@@ -403,7 +408,41 @@ class TileShadowNode extends ShadowBaseNode {
 		return Fn( ( builder ) => {
 
 			this.setupShadowPosition( builder );
-			return min( ...this._shadowNodes ).toVar( 'shadowValue' );
+
+			// The tiles split the light's shadow camera into a grid, so the tile covering
+			// this fragment follows from its position in the full shadow camera. Only that
+			// tile is sampled.
+
+			const { tilesX, tilesY } = this.config;
+			const shadow = this.originalLight.shadow;
+			const normalBias = reference( 'normalBias', 'float', shadow ).setGroup( renderGroup );
+
+			const shadowPosition = lightShadowMatrix( this.originalLight ).mul( vec4( shadowPositionWorld.add( normalWorld.mul( normalBias ) ), 1 ) );
+			const shadowCoord = shadowPosition.xy.div( shadowPosition.w );
+
+			const column = shadowCoord.x.mul( tilesX ).floor().clamp( 0, tilesX - 1 );
+			const row = shadowCoord.y.oneMinus().mul( tilesY ).floor().clamp( 0, tilesY - 1 ); // tiles start from the top row
+			const tileIndex = int( row.mul( tilesX ).add( column ) ).toVar();
+
+			const shadowValue = float( 1 ).toVar( 'shadowValue' );
+
+			let conditional = If( tileIndex.equal( 0 ), () => {
+
+				shadowValue.assign( this._shadowNodes[ 0 ] );
+
+			} );
+
+			for ( let i = 1; i < this._shadowNodes.length; i ++ ) {
+
+				conditional = conditional.ElseIf( tileIndex.equal( i ), () => {
+
+					shadowValue.assign( this._shadowNodes[ i ] );
+
+				} );
+
+			}
+
+			return shadowValue;
 
 		} )();
 
